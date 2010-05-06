@@ -21,15 +21,6 @@ def get_data(outfile, url, st, data_len):
         # fetchLen))
         data_len -= fetchLen    
 
-def split_data(datasize, num_connections):
-    psize = datasize / num_connections
-    len_list = []
-    for i in range(num_connections):
-        len_list.append(psize)
-    len_list[0] += datasize % num_connections
-    # print len_list
-    return len_list
-
 
 if __name__ == "__main__":
     
@@ -79,7 +70,9 @@ if __name__ == "__main__":
     filesize = get_file_size(url)
     print "Need to fetch %d bytes\n" % filesize
 
-    len_list = split_data(filesize, options.num_connections)
+    # get list of data segment sizes to be fetched by each thread.
+    len_list = [ (filesize / options.num_connections) for i in range(options.num_connections) ]
+    len_list[0] += filesize % options.num_connections
 
     #create output file
     outfile = os.open(output_file, os.O_CREAT | os.O_WRONLY)
