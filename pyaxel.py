@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, urllib2, socket
 from optparse import OptionParser
 
 def get_file_size(path):
@@ -58,6 +58,10 @@ if __name__ == "__main__":
         parser.print_help()
         sys.exit(1)
 
+    # General configuration
+    urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
+    urllib2.install_opener(urllib2.build_opener(urllib2.HTTPCookieProcessor()))    
+    socket.setdefaulttimeout(120) # 2 minutes
 
     url = args[0]
     
