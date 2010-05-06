@@ -70,6 +70,10 @@ if __name__ == "__main__":
     if options.output_file != None:
         output_file = options.output_file
 
+    if output_file == "":
+        print "Invalid URL"
+        sys.exit(1)
+
     print "Destination = ", output_file
     
     filesize = get_file_size(url)
