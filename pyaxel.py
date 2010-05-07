@@ -1,25 +1,52 @@
-import sys, os, urllib2, socket
+import sys, os, urllib2, socket, time, threading
 from optparse import OptionParser
 
-def get_file_size(path):
-    #TODO
-    #print "File size is: ", os.path.getsize(path)
-    #return os.path.getsize(path)
-    pass
-
-def get_data(outfile, url, st, data_len):
-    os.lseek(outfile, st, os.SEEK_SET)
-
-    # TODO: create url object to start fetching data, etc.
+std_headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2) Gecko/20100115 Firefox/3.6',
+    'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+    'Accept': 'text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5',
+    'Accept-Language': 'en-us,en;q=0.5',
+}
 
 
-    # get data in 128 byte intervals
-    pieceLen = 128
-    while data_len > 0:
-        fetchLen = pieceLen if data_len >= pieceLen else data_len
-        # TODO: fix this line - os.write(outfile, os.read(infile,
-        # fetchLen))
-        data_len -= fetchLen    
+def get_file_size(url):
+    request = urllib2.Request(url, None, std_headers)
+    data = urllib2.urlopen(request)
+    content_length = data.info()['Content-Length']
+    print content_length
+    return int(content_length)
+
+class FetchData(threading.Thread):
+
+    def __init__(self, name, url, out_file, start_offset, length, progress):
+        threading.Thread.__init__(self)
+        self.name = name
+        self.url = url
+        self.out_file = out_file
+        self.start_offset = start_offset
+        self.length = length
+        self.progress = progress
+
+    def run(self):
+        # Ready the url object
+        # print "Running thread with %d-%d" % (self.start_offset, self.length)
+        request = urllib2.Request(url, None, std_headers)
+        request.add_header('Range','bytes=%d-%d' % (self.start_offset, 
+                                                    self.start_offset+self.length))
+        data = urllib2.urlopen(request)
+
+        # Open the output file
+        out_fd = os.open(self.out_file, os.O_WRONLY)
+        os.lseek(out_fd, self.start_offset, os.SEEK_SET)
+        
+        block_size = 1024
+        while self.length > 0:
+            fetch_size = block_size if self.length >= block_size else self.length
+            data_block = data.read(fetch_size)            
+            assert(len(data_block) == fetch_size)
+            self.length -= fetch_size
+            self.progress[int(self.name)] += fetch_size
+            os.write(out_fd, data_block)
 
 
 if __name__ == "__main__":
@@ -75,14 +102,29 @@ if __name__ == "__main__":
     len_list[0] += filesize % options.num_connections
 
     #create output file
-    outfile = os.open(output_file, os.O_CREAT | os.O_WRONLY)
+    out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
 
+    fetch_threads = []
+    progress = [ 0 for i in len_list ]
     start_offset = 0
-    for i in len_list:
+    for i in range(len(len_list)):
         # each iteration should spawn a thread.
-        get_data(outfile, url, start_offset, i)
+        current_thread = FetchData(i, url, output_file, start_offset, len_list[i], progress)
+        fetch_threads.append(current_thread)
+        current_thread.start()
         start_offset += i
+
+    while threading.active_count() > 1:
+        print "\r",progress,
+        sys.stdout.flush()
+        time.sleep(1)
+    
+    print "\r",progress,
+    sys.stdout.flush()
+    
+
+    for each_thread in fetch_threads:
+        each_thread.join()
 
     # TODO: start a thread to monitor and output the download progress
     # and to respond cleanly to terminate requests (via Ctrl+C)
-    
