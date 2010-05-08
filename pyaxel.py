@@ -1,4 +1,4 @@
-import sys, os, urllib2, socket, time, threading
+import sys, os, urllib2, socket, time, multiprocessing
 from optparse import OptionParser
 
 std_headers = {
@@ -13,34 +13,38 @@ def get_file_size(url):
     request = urllib2.Request(url, None, std_headers)
     data = urllib2.urlopen(request)
     content_length = data.info()['Content-Length']
-    print content_length
+    # print content_length
     return int(content_length)
 
-def get_progress_report(progress):
+def get_progress_report(progress_datadl, progress_time):
     ret_str = "["
     dl_len, elapsed_time = 0, 0.0
-    for rec in progress:
-        ret_str += " " + str(rec[0])
-        dl_len += rec[0]
-        elapsed_time += rec[1]
+
+    for i in range(len(progress_datadl)):
+        ret_str += " " + str(progress_datadl[i])
+        dl_len += progress_datadl[i]
+        elapsed_time += progress_time[i]
+
     ret_str += " ] Speed = "
     if elapsed_time == 0:
         avg_speed = 0
     else:
         avg_speed = dl_len / (1024*elapsed_time)
     ret_str += "%.1f KB/s" % avg_speed
+
     return ret_str    
 
-class FetchData(threading.Thread):
+class FetchData(multiprocessing.Process):
 
-    def __init__(self, name, url, out_file, start_offset, length, progress):
-        threading.Thread.__init__(self)
+    def __init__(self, name, url, out_file, start_offset, length, progress_datadl, progress_time):
+        multiprocessing.Process.__init__(self)
         self.name = name
         self.url = url
         self.out_file = out_file
         self.start_offset = start_offset
         self.length = length
-        self.progress = progress
+        self.progress_datadl = progress_datadl
+        self.progress_time = progress_time
 
     def run(self):
         # Ready the url object
@@ -63,8 +67,8 @@ class FetchData(threading.Thread):
             elapsed = end_time - start_time            
             assert(len(data_block) == fetch_size)
             self.length -= fetch_size
-            self.progress[int(self.name)][0] += fetch_size
-            self.progress[int(self.name)][1] += elapsed
+            self.progress_datadl[int(self.name)] += fetch_size
+            self.progress_time[int(self.name)] += elapsed
             os.write(out_fd, data_block)
 
 
@@ -124,23 +128,25 @@ if __name__ == "__main__":
     out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
 
     fetch_threads = []
-    progress = [ [0,0.0] for i in len_list ]
+    progress_datadl = multiprocessing.Array('d', [0 for i in len_list] )
+    progress_time = multiprocessing.Array('d', [0 for i in len_list] )
     start_offset = 0
     for i in range(len(len_list)):
         # each iteration should spawn a thread.
-        current_thread = FetchData(i, url, output_file, start_offset, len_list[i], progress)
+        current_thread = FetchData(str(i), url, output_file, start_offset, 
+                                   len_list[i], progress_datadl, progress_time)
         fetch_threads.append(current_thread)
         current_thread.start()
         start_offset += i
 
-    while threading.active_count() > 1:
+    while len(multiprocessing.active_children()) > 0:
         #print "\n",progress
-        report_string = get_progress_report(progress)
+        report_string = get_progress_report(progress_datadl, progress_time)
         print "\r", report_string,        
         sys.stdout.flush()
         time.sleep(1)
     
-    print "\r", get_progress_report(progress)
+    print "\r", get_progress_report(progress_datadl, progress_time)
     sys.stdout.flush()
     
     # TODO: start a thread to monitor and output the download progress
