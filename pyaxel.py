@@ -122,9 +122,5 @@ if __name__ == "__main__":
     print "\r",progress,
     sys.stdout.flush()
     
-
-    for each_thread in fetch_threads:
-        each_thread.join()
-
     # TODO: start a thread to monitor and output the download progress
     # and to respond cleanly to terminate requests (via Ctrl+C)
