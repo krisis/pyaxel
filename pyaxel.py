@@ -16,6 +16,21 @@ def get_file_size(url):
     print content_length
     return int(content_length)
 
+def get_progress_report(progress):
+    ret_str = "["
+    dl_len, elapsed_time = 0, 0.0
+    for rec in progress:
+        ret_str += " " + str(rec[0])
+        dl_len += rec[0]
+        elapsed_time += rec[1]
+    ret_str += " ] Speed = "
+    if elapsed_time == 0:
+        avg_speed = 0
+    else:
+        avg_speed = dl_len / (1024*elapsed_time)
+    ret_str += "%.1f KB/s" % avg_speed
+    return ret_str    
+
 class FetchData(threading.Thread):
 
     def __init__(self, name, url, out_file, start_offset, length, progress):
@@ -42,10 +57,14 @@ class FetchData(threading.Thread):
         block_size = 1024
         while self.length > 0:
             fetch_size = block_size if self.length >= block_size else self.length
+            start_time = time.time()
             data_block = data.read(fetch_size)            
+            end_time = time.time()
+            elapsed = end_time - start_time            
             assert(len(data_block) == fetch_size)
             self.length -= fetch_size
-            self.progress[int(self.name)] += fetch_size
+            self.progress[int(self.name)][0] += fetch_size
+            self.progress[int(self.name)][1] += elapsed
             os.write(out_fd, data_block)
 
 
@@ -105,7 +124,7 @@ if __name__ == "__main__":
     out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
 
     fetch_threads = []
-    progress = [ 0 for i in len_list ]
+    progress = [ [0,0.0] for i in len_list ]
     start_offset = 0
     for i in range(len(len_list)):
         # each iteration should spawn a thread.
@@ -115,11 +134,13 @@ if __name__ == "__main__":
         start_offset += i
 
     while threading.active_count() > 1:
-        print "\r",progress,
+        #print "\n",progress
+        report_string = get_progress_report(progress)
+        print "\r", report_string,        
         sys.stdout.flush()
         time.sleep(1)
     
-    print "\r",progress,
+    print "\r", get_progress_report(progress)
     sys.stdout.flush()
     
     # TODO: start a thread to monitor and output the download progress
