@@ -18,18 +18,18 @@ def get_file_size(url):
 
 def get_progress_report(progress_datadl, progress_time):
     ret_str = "["
-    dl_len, elapsed_time = 0, 0.0
+    dl_len, max_elapsed_time = 0, 0.0
 
     for i in range(len(progress_datadl)):
         ret_str += " " + str(progress_datadl[i])
         dl_len += progress_datadl[i]
-        elapsed_time += progress_time[i]
+        max_elapsed_time = progress_time[i] if progress_time[i] > max_elapsed_time else max_elapsed_time
 
     ret_str += " ] Speed = "
-    if elapsed_time == 0:
+    if max_elapsed_time == 0:
         avg_speed = 0
     else:
-        avg_speed = dl_len / (1024*elapsed_time)
+        avg_speed = dl_len / (1024*max_elapsed_time)
     ret_str += "%.1f KB/s" % avg_speed
 
     return ret_str    
@@ -137,7 +137,7 @@ if __name__ == "__main__":
                                    len_list[i], progress_datadl, progress_time)
         fetch_threads.append(current_thread)
         current_thread.start()
-        start_offset += i
+        start_offset += len_list[i]
 
     while len(multiprocessing.active_children()) > 0:
         #print "\n",progress
