@@ -128,10 +128,11 @@ if __name__ == "__main__":
     start_offset = 0
     for i in range(len(len_list)):
         # each iteration should spawn a thread.
+        # print start_offset, len_list[i]
         current_thread = FetchData(i, url, output_file, start_offset, len_list[i], progress)
         fetch_threads.append(current_thread)
         current_thread.start()
-        start_offset += i
+        start_offset += len_list[i]
 
     while threading.active_count() > 1:
         #print "\n",progress
