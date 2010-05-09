@@ -18,16 +18,16 @@ def get_file_size(url):
 
 def get_progress_report(progress):
     ret_str = "["
-    dl_len, elapsed_time = 0, 0.0
+    dl_len, max_elapsed_time = 0, 0.0
     for rec in progress:
         ret_str += " " + str(rec[0])
         dl_len += rec[0]
-        elapsed_time += rec[1]
+        max_elapsed_time = rec[1] if rec[1] > max_elapsed_time else max_elapsed_time
     ret_str += " ] Speed = "
-    if elapsed_time == 0:
+    if max_elapsed_time == 0:
         avg_speed = 0
     else:
-        avg_speed = dl_len / (1024*elapsed_time)
+        avg_speed = dl_len / (1024*max_elapsed_time)
     ret_str += "%.1f KB/s" % avg_speed
     return ret_str    
 
