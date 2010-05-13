@@ -79,7 +79,7 @@ if __name__ == "__main__":
     parser.add_option("-q", "--quiet",
                       action="store_false", dest="verbose", default=True,
                       help="don't print status messages to stdout")
-    parser.add_option("-n", "--num-connections", dest="num_connections", default=4,
+    parser.add_option("-n", "--num-connections", dest="num_connections", type="int", default=4,
                       help="You can specify an alternative number of connections here.",
                       metavar="NUM")
     parser.add_option("-o", "--output", dest="output_file", 
