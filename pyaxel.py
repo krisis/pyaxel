@@ -169,8 +169,7 @@ if __name__ == "__main__":
             time.sleep(1)
         except KeyboardInterrupt:
             for thread in fetch_threads:
-                thread._want_to_quit = True
-            sys.exit(1);
+                thread._need_to_quit = True
 
     # Blank spaces trail below to erase previous output. TODO: Need to
     # do this better.
