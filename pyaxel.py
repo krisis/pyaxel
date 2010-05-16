@@ -10,13 +10,13 @@ std_headers = {
 
 
 def report_bytes(bytes):
-    if bytes == 0: return "0 b"
+    if bytes == 0: return "0b"
     k = math.log(bytes,1024)
-    return "%.2f %s" % (bytes / (1024.0**int(k)), "bKMG"[int(k)])
+    return "%.2f%s" % (bytes / (1024.0**int(k)), "bKMGTPEY"[int(k)])
 
 def report_time(time_in_secs):
     mult_list = [60, 60*60, 60*60*24]
-    unit_list = ["seconds", "minutess", "hours", "days"]
+    unit_list = ["second(s)", "minute(s)", "hour(s)", "day(s)"]
     for i in range(len(mult_list)):
         if time_in_secs < mult_list[i]:
             return "%d %s" % (int(time_in_secs / (mult_list[i-1] if i>0 else 1)), unit_list[i])
