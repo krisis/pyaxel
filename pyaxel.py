@@ -14,6 +14,14 @@ def report_bytes(bytes):
     k = math.log(bytes,1024)
     return "%.2f %s" % (bytes / (1024.0**int(k)), "bKMG"[int(k)])
 
+def report_time(time_in_secs):
+    mult_list = [60, 60*60, 60*60*24]
+    unit_list = ["seconds", "minutess", "hours", "days"]
+    for i in range(len(mult_list)):
+        if time_in_secs < mult_list[i]:
+            return "%d %s" % (int(time_in_secs / (mult_list[i-1] if i>0 else 1)), unit_list[i])
+    return "%d %s" % ( (int(time_in_secs / mult_list[2])), unit_list[3])
+
 def get_file_size(url):
     request = urllib2.Request(url, None, std_headers)
     data = urllib2.urlopen(request)
@@ -21,7 +29,7 @@ def get_file_size(url):
     # print content_length
     return int(content_length)
 
-def get_progress_report(progress):
+def get_progress_report(progress, orig_filesize = 0):
     ret_str = "["
     dl_len, max_elapsed_time = 0, 0.0
     for rec in progress:
@@ -33,9 +41,19 @@ def get_progress_report(progress):
         avg_speed = 0
     else:
         avg_speed = dl_len / max_elapsed_time
-    ret_str += "%s/s" % report_bytes(avg_speed)
-    return ret_str    
+    ret_str += "%s/s." % report_bytes(avg_speed)
 
+    #Estimate remaining time.
+    if orig_filesize > 0:
+        if avg_speed > 0:
+            ret_str += " Completes in %s." % report_time( (orig_filesize - dl_len) / avg_speed)
+        else:
+            ret_str += " Starting download..."
+ 
+    #print "\n",ret_str
+
+    return ret_str    
+        
 class FetchData(threading.Thread):
 
     def __init__(self, name, url, out_file, start_offset, length, progress):
@@ -141,11 +159,13 @@ if __name__ == "__main__":
 
     while threading.active_count() > 1:
         #print "\n",progress
-        report_string = get_progress_report(progress)
+        report_string = get_progress_report(progress, filesize)
         print "\r", report_string,        
         sys.stdout.flush()
         time.sleep(1)
-    
-    print "\r", get_progress_report(progress)
+
+    # Blank spaces trail below to erase previous output. TODO: Need to
+    # do this better.
+    print "\r", get_progress_report(progress), "                                  "
     sys.stdout.flush()
 
