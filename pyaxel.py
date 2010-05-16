@@ -95,84 +95,83 @@ class FetchData(threading.Thread):
 
 
 if __name__ == "__main__":
-    
-    parser = OptionParser(usage="Usage: %prog [options] url")
-    parser.add_option("-s", "--max-speed", dest="max_speed", 
-                      help="Specifies maximum speed (bytes per second)."
-                      " Useful if you don't want the program to suck up all"
-                      " of your bandwidth",
-                      metavar="SPEED")
-    parser.add_option("-q", "--quiet",
-                      action="store_false", dest="verbose", default=True,
-                      help="don't print status messages to stdout")
-    parser.add_option("-n", "--num-connections", dest="num_connections", type="int", default=4,
-                      help="You can specify an alternative number of connections here.",
-                      metavar="NUM")
-    parser.add_option("-o", "--output", dest="output_file", 
-                      help="By default, data does to a local file of the same name. If "
-                      "this option is used, downloaded data will go to this file.")    
-    
-    (options, args) = parser.parse_args()
-    
-    print "Options: ", options
-    print "args: ", args
+    try:
+        fetch_threads = []
+        parser = OptionParser(usage="Usage: %prog [options] url")
+        parser.add_option("-s", "--max-speed", dest="max_speed", 
+                          help="Specifies maximum speed (bytes per second)."
+                          " Useful if you don't want the program to suck up all"
+                          " of your bandwidth",
+                          metavar="SPEED")
+        parser.add_option("-q", "--quiet",
+                          action="store_false", dest="verbose", default=True,
+                          help="don't print status messages to stdout")
+        parser.add_option("-n", "--num-connections", dest="num_connections", type="int", default=4,
+                          help="You can specify an alternative number of connections here.",
+                          metavar="NUM")
+        parser.add_option("-o", "--output", dest="output_file", 
+                          help="By default, data does to a local file of the same name. If "
+                          "this option is used, downloaded data will go to this file.")    
+        
+        (options, args) = parser.parse_args()
+        
+        print "Options: ", options
+        print "args: ", args
 
-    if len(args) != 1:
-        parser.print_help()
-        sys.exit(1)
+        if len(args) != 1:
+            parser.print_help()
+            sys.exit(1)
 
-    # General configuration
-    urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
-    urllib2.install_opener(urllib2.build_opener(urllib2.HTTPCookieProcessor()))    
-    socket.setdefaulttimeout(120) # 2 minutes
+        # General configuration
+        urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
+        urllib2.install_opener(urllib2.build_opener(urllib2.HTTPCookieProcessor()))    
+        socket.setdefaulttimeout(120) # 2 minutes
 
-    url = args[0]
-    
-    output_file = url.rsplit("/",1)[1] #basename of the url
-    
-    if options.output_file != None:
-        output_file = options.output_file
+        url = args[0]
+        
+        output_file = url.rsplit("/",1)[1] #basename of the url
+        
+        if options.output_file != None:
+            output_file = options.output_file
 
-    if output_file == "":
-        print "Invalid URL"
-        sys.exit(1)
+        if output_file == "":
+            print "Invalid URL"
+            sys.exit(1)
 
-    print "Destination = ", output_file
-    
-    filesize = get_file_size(url)
-    print "Need to fetch %s\n" % report_bytes(filesize)
+        print "Destination = ", output_file
+        
+        filesize = get_file_size(url)
+        print "Need to fetch %s\n" % report_bytes(filesize)
 
-    # get list of data segment sizes to be fetched by each thread.
-    len_list = [ (filesize / options.num_connections) for i in range(options.num_connections) ]
-    len_list[0] += filesize % options.num_connections
+        # get list of data segment sizes to be fetched by each thread.
+        len_list = [ (filesize / options.num_connections) for i in range(options.num_connections) ]
+        len_list[0] += filesize % options.num_connections
 
-    #create output file
-    out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
+        #create output file
+        out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
 
-    fetch_threads = []
-    progress = [ [0,0.0] for i in len_list ]
-    start_offset = 0
-    for i in range(len(len_list)):
-        # each iteration should spawn a thread.
-        # print start_offset, len_list[i]
-        current_thread = FetchData(i, url, output_file, start_offset, len_list[i], progress)
-        fetch_threads.append(current_thread)
-        current_thread.start()
-        start_offset += len_list[i]
+        progress = [ [0,0.0] for i in len_list ]
+        start_offset = 0
+        for i in range(len(len_list)):
+            # each iteration should spawn a thread.
+            # print start_offset, len_list[i]
+            current_thread = FetchData(i, url, output_file, start_offset, len_list[i], progress)
+            fetch_threads.append(current_thread)
+            current_thread.start()
+            start_offset += len_list[i]
 
-    while threading.active_count() > 1:
-        #print "\n",progress               
-        try:
+        while threading.active_count() > 1:
+            #print "\n",progress               
             report_string = get_progress_report(progress, filesize)
             print "\r", report_string,
             sys.stdout.flush()
             time.sleep(1)
-        except KeyboardInterrupt:
-            for thread in fetch_threads:
-                thread._need_to_quit = True
 
-    # Blank spaces trail below to erase previous output. TODO: Need to
-    # do this better.
-    print "\r", get_progress_report(progress), "                                  "
-    sys.stdout.flush()
+        # Blank spaces trail below to erase previous output. TODO: Need to
+        # do this better.
+        print "\r", get_progress_report(progress), "                                  "
+        sys.stdout.flush()
+    except:
+        for thread in fetch_threads:
+            thread._need_to_quit = True
 
