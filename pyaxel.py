@@ -41,6 +41,7 @@ class FetchData(threading.Thread):
         self.start_offset = start_offset
         self.length = length
         self.progress = progress
+        self._need_to_quit = False
 
     def run(self):
         # Ready the url object
@@ -56,6 +57,8 @@ class FetchData(threading.Thread):
         
         block_size = 1024
         while self.length > 0:
+            if self._need_to_quit:
+                return
             fetch_size = block_size if self.length >= block_size else self.length
             start_time = time.time()
             data_block = data.read(fetch_size)            
@@ -136,10 +139,15 @@ if __name__ == "__main__":
 
     while threading.active_count() > 1:
         #print "\n",progress
-        report_string = get_progress_report(progress)
-        print "\r", report_string,        
-        sys.stdout.flush()
-        time.sleep(1)
+        try:
+            report_string = get_progress_report(progress)
+            print "\r", report_string,        
+            sys.stdout.flush()
+            time.sleep(1)
+        except KeyboardInterrupt:
+            for thread in fetch_threads:
+                thread._want_to_quit = True
+            sys.exit(1);
     
     print "\r", get_progress_report(progress)
     sys.stdout.flush()
