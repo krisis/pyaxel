@@ -1,4 +1,4 @@
-import sys, os, urllib2, socket, time, threading
+import sys, os, urllib2, socket, time, threading, math
 from optparse import OptionParser
 
 std_headers = {
@@ -8,6 +8,11 @@ std_headers = {
     'Accept-Language': 'en-us,en;q=0.5',
 }
 
+
+def report_bytes(bytes):
+    if bytes == 0: return "0 b"
+    k = math.log(bytes,1024)
+    return "%.2f %s" % (bytes / (1024.0**int(k)), "bKMG"[int(k)])
 
 def get_file_size(url):
     request = urllib2.Request(url, None, std_headers)
@@ -20,15 +25,15 @@ def get_progress_report(progress):
     ret_str = "["
     dl_len, max_elapsed_time = 0, 0.0
     for rec in progress:
-        ret_str += " " + str(rec[0])
+        ret_str += " " + report_bytes(rec[0])
         dl_len += rec[0]
         max_elapsed_time = max(rec[1], max_elapsed_time)
     ret_str += " ] Speed = "
     if max_elapsed_time == 0:
         avg_speed = 0
     else:
-        avg_speed = dl_len / (1024*max_elapsed_time)
-    ret_str += "%.1f KB/s" % avg_speed
+        avg_speed = dl_len / max_elapsed_time
+    ret_str += "%s/s" % report_bytes(avg_speed)
     return ret_str    
 
 class FetchData(threading.Thread):
@@ -114,7 +119,7 @@ if __name__ == "__main__":
     print "Destination = ", output_file
     
     filesize = get_file_size(url)
-    print "Need to fetch %d bytes\n" % filesize
+    print "Need to fetch %s\n" % report_bytes(filesize)
 
     # get list of data segment sizes to be fetched by each thread.
     len_list = [ (filesize / options.num_connections) for i in range(options.num_connections) ]
