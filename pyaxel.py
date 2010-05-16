@@ -13,7 +13,7 @@ def get_file_size(url):
     request = urllib2.Request(url, None, std_headers)
     data = urllib2.urlopen(request)
     content_length = data.info()['Content-Length']
-    print content_length
+    # print content_length
     return int(content_length)
 
 def get_progress_report(progress):
@@ -22,7 +22,7 @@ def get_progress_report(progress):
     for rec in progress:
         ret_str += " " + str(rec[0])
         dl_len += rec[0]
-        max_elapsed_time = rec[1] if rec[1] > max_elapsed_time else max_elapsed_time
+        max_elapsed_time = max(rec[1], max_elapsed_time)
     ret_str += " ] Speed = "
     if max_elapsed_time == 0:
         avg_speed = 0
@@ -143,6 +143,4 @@ if __name__ == "__main__":
     
     print "\r", get_progress_report(progress)
     sys.stdout.flush()
-    
-    # TODO: start a thread to monitor and output the download progress
-    # and to respond cleanly to terminate requests (via Ctrl+C)
+
