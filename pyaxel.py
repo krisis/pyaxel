@@ -164,7 +164,7 @@ if __name__ == "__main__":
         #print "\n",progress               
         try:
             report_string = get_progress_report(progress, filesize)
-            print "\r", report_string
+            print "\r", report_string,
             sys.stdout.flush()
             time.sleep(1)
         except KeyboardInterrupt:
