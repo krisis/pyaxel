@@ -9,6 +9,10 @@ std_headers = {
 }
 
 
+def report_progress(out_str):
+    sys.stdout.flush()
+    print "\r %s" % (out_str),
+
 def report_bytes(bytes):
     if bytes == 0: return "0b"
     k = math.log(bytes,1024)
@@ -162,15 +166,12 @@ if __name__ == "__main__":
 
         while threading.active_count() > 1:
             #print "\n",progress               
-            report_string = get_progress_report(progress, filesize)
-            print "\r", report_string,
-            sys.stdout.flush()
+            report_progress(get_progress_report(progress, filesize))
             time.sleep(1)
 
         # Blank spaces trail below to erase previous output. TODO: Need to
         # do this better.
-        print "\r", get_progress_report(progress), "                                  "
-        sys.stdout.flush()
+        report_progress(get_progress_report(progress))
     except:
         for thread in fetch_threads:
             thread._need_to_quit = True
