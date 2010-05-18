@@ -33,11 +33,27 @@ def get_file_size(url):
     # print content_length
     return int(content_length)
 
+def update_progress(progress):
+    ret_str = ""
+    for i in range(len(progress)):
+        dots[i] = "".join(['=' for j in range((progress[i][0]*uwidth)/len_list[i])])
+        if ret_str == "":
+            ret_str += dots[i]
+        else:
+            ret_str += "|" + dots[i]
+        if len(dots[i]) < uwidth:
+            ret_str += '>'
+            ret_str += "".join([' ' for i in range(uwidth-len(dots[i])-1)])
+    return ret_str
+
 def get_progress_report(progress, orig_filesize = 0):
     ret_str = "["
     dl_len, max_elapsed_time = 0, 0.0
+
+    ret_str += update_progress(progress)
+
     for rec in progress:
-        ret_str += " " + report_bytes(rec[0])
+        #ret_str += " " + report_bytes(rec[0])
         dl_len += rec[0]
         max_elapsed_time = max(rec[1], max_elapsed_time)
     ret_str += " ] Speed = "
@@ -150,6 +166,13 @@ if __name__ == "__main__":
         # get list of data segment sizes to be fetched by each thread.
         len_list = [ (filesize / options.num_connections) for i in range(options.num_connections) ]
         len_list[0] += filesize % options.num_connections
+
+        # dots is a string representation of percentage downloaded
+        dots = [" " for i in range(options.num_connections)]
+
+        # getting terminal width from 'stty size' command
+        term_rows, term_cols = map(int, os.popen('stty size', 'r').read().split())
+        uwidth = (term_cols - 2*options.num_connections - 45)/options.num_connections
 
         #create output file
         out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
