@@ -63,6 +63,7 @@ def get_progress_report(progress, orig_filesize = 0):
     if orig_filesize > 0:
         if avg_speed > 0:
             ret_str += " Completes in %s." % report_time( (orig_filesize - dl_len) / avg_speed)
+            ret_str += " " + str(dl_len*100/orig_filesize) + "%"
         else:
             ret_str += " Starting download..."
  
@@ -169,7 +170,7 @@ if __name__ == "__main__":
 
         # getting terminal width from 'stty size' command
         term_rows, term_cols = map(int, os.popen('stty size', 'r').read().split())
-        uwidth = (term_cols - 2*options.num_connections - 45)/options.num_connections
+        uwidth = (term_cols - 2*options.num_connections - 48)/options.num_connections
 
         #create output file
         out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
@@ -191,7 +192,7 @@ if __name__ == "__main__":
 
         # Blank spaces trail below to erase previous output. TODO: Need to
         # do this better.
-        get_progress_report(progress)
+        get_progress_report(progress, filesize)
     except:
         for thread in fetch_threads:
             thread._need_to_quit = True
