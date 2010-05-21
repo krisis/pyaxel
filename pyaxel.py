@@ -62,14 +62,17 @@ def get_progress_report(progress, orig_filesize = 0):
     #Estimate remaining time.
     if orig_filesize > 0:
         if avg_speed > 0:
-            ret_str += " Completes in %s." % report_time( (orig_filesize - dl_len) / avg_speed)
-            ret_str += " " + str(dl_len*100/orig_filesize) + "%"
+            remaining_dl = orig_filesize - dl_len
+            if remaining_dl > 0:
+                ret_str += " %s left." % report_time( (orig_filesize - dl_len) / avg_speed)                
         else:
             ret_str += " Starting download..."
+    
+    ret_str = str(dl_len*100/orig_filesize) + "% " + ret_str 
  
     #print "\n",ret_str
     sys.stdout.flush()
-    print "\r %s" % (ret_str),
+    print "\r%s" % (ret_str),
 
         
 class FetchData(threading.Thread):
