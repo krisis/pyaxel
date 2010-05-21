@@ -193,7 +193,8 @@ if __name__ == "__main__":
         # Blank spaces trail below to erase previous output. TODO: Need to
         # do this better.
         get_progress_report(progress, filesize)
-    except:
+    except Exception, e:
+        print e
         for thread in fetch_threads:
             thread._need_to_quit = True
 
