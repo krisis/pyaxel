@@ -52,7 +52,7 @@ def get_progress_report(progress, orig_filesize = 0):
         #ret_str += " " + report_bytes(rec[0])
         dl_len += rec[0]
         max_elapsed_time = max(rec[1], max_elapsed_time)
-    ret_str += " ] Speed = "
+    ret_str += "] Speed = "
     if max_elapsed_time == 0:
         avg_speed = 0
     else:
@@ -90,7 +90,7 @@ class FetchData(threading.Thread):
     def run(self):
         # Ready the url object
         # print "Running thread with %d-%d" % (self.start_offset, self.length)
-        request = urllib2.Request(url, None, std_headers)
+        request = urllib2.Request(self.url, None, std_headers)
         request.add_header('Range','bytes=%d-%d' % (self.start_offset, 
                                                     self.start_offset+self.length))
         data = urllib2.urlopen(request)
@@ -196,8 +196,13 @@ if __name__ == "__main__":
         # Blank spaces trail below to erase previous output. TODO: Need to
         # do this better.
         get_progress_report(progress, filesize)
-    except Exception, e:
-        print e
+
+    except KeyboardInterrupt, k:
         for thread in fetch_threads:
             thread._need_to_quit = True
 
+    except Exception, e:
+        # TODO: handle other types of errors too.
+        print e
+        for thread in fetch_threads:
+            thread._need_to_quit = True
