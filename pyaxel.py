@@ -9,18 +9,80 @@ std_headers = {
 }
 
 
+class ProgressBar:
+    def __init__(self, n_conn, filesize):
+        self.n_conn = n_conn
+        self.filesize = filesize
+        self.progress = [[0,0.0] for i in range(n_conn)]
+        self.dots = ["" for i in range(n_conn)]
+        pass
+    
+    def _get_term_width(self):
+        term_rows, term_cols = map(int, os.popen('stty size', 'r').read().split())
+        return term_cols
+
+    def _get_download_rate(self, bytes):
+        ret_str = report_bytes(bytes)
+        ret_str += "/s."
+        return len(ret_str), ret_str
+
+    def _get_percentage_complete(self, dl_len):
+        assert self.filesize != 0
+        ret_str = str(dl_len*100/self.filesize) + "%."
+        return len(ret_str), ret_str
+    
+    def _get_time_left(self, time_in_secs):
+        ret_str = ""
+        mult_list = [60, 60*60, 60*60*24]
+        unit_list = ["second(s)", "minute(s)", "hour(s)", "day(s)"]
+        for i in range(len(mult_list)):
+            if time_in_secs < mult_list[i]:
+                ret_str = "%d %s" % (int(time_in_secs / (mult_list[i-1] if i>0 else 1)), unit_list[i])
+        if len(ret_str) == 0: 
+            ret_str = "%d %s." % ( (int(time_in_secs / mult_list[2])), unit_list[3])
+        return len(ret_str), ret_str
+
+    def _get_pbar(self, width):
+        ret_str = "["
+        for i in range(len(self.progress)):
+            self.dots[i] = "".join(['=' for j in range((self.progress[i][0]*width)/len_list[i])])
+            if ret_str == "[":
+                ret_str += self.dots[i]
+            else:
+                ret_str += "|" + self.dots[i]
+            if len(self.dots[i]) < width:
+                ret_str += '>'
+                ret_str += "".join([' ' for i in range(width-len(self.dots[i])-1)])
+
+        ret_str += "]"
+        return len(ret_str), ret_str
+
+    def display_progress(self):
+        dl_len, max_elapsed_time = 0, 0.0
+        for rec in self.progress:
+            dl_len += rec[0]
+            max_elapsed_time = max(max_elapsed_time, rec[1])
+
+        if max_elapsed_time == 0:
+            avg_speed = 0
+        else:
+            avg_speed = dl_len / max_elapsed_time
+
+        ldr, drate = self._get_download_rate(avg_speed)
+        lpc, pcomp = self._get_percentage_complete(dl_len)
+        ltl, tleft = self._get_time_left((self.filesize - dl_len)/avg_speed if avg_speed > 0 else 0)
+        # term_width - #(|) + #([) + #(]) + #(strings) + 6 (for spaces and periods)
+        available_width = self._get_term_width() - (ldr + lpc + ltl) - self.n_conn - 1 - 6
+        lpb, pbar = self._get_pbar(available_width/self.n_conn)
+        sys.stdout.flush()
+        print "\r%s %s %s %s" % (drate, pcomp, tleft, pbar),
+    
+
 def report_bytes(bytes):
     if bytes == 0: return "0b"
     k = math.log(bytes,1024)
-    return "%.2f%s" % (bytes / (1024.0**int(k)), "bKMGTPEY"[int(k)])
-
-def report_time(time_in_secs):
-    mult_list = [60, 60*60, 60*60*24]
-    unit_list = ["second(s)", "minute(s)", "hour(s)", "day(s)"]
-    for i in range(len(mult_list)):
-        if time_in_secs < mult_list[i]:
-            return "%d %s" % (int(time_in_secs / (mult_list[i-1] if i>0 else 1)), unit_list[i])
-    return "%d %s" % ( (int(time_in_secs / mult_list[2])), unit_list[3])
+    ret_str = "%.2f%s" % (bytes / (1024.0**int(k)), "bKMGTPEY"[int(k)])
+    return ret_str
 
 def get_file_size(url):
     request = urllib2.Request(url, None, std_headers)
@@ -28,51 +90,6 @@ def get_file_size(url):
     content_length = data.info()['Content-Length']
     # print content_length
     return int(content_length)
-
-def update_progress(progress):
-    ret_str = ""
-    for i in range(len(progress)):
-        dots[i] = "".join(['=' for j in range((progress[i][0]*uwidth)/len_list[i])])
-        if ret_str == "":
-            ret_str += dots[i]
-        else:
-            ret_str += "|" + dots[i]
-        if len(dots[i]) < uwidth:
-            ret_str += '>'
-            ret_str += "".join([' ' for i in range(uwidth-len(dots[i])-1)])
-    return ret_str
-
-def get_progress_report(progress, orig_filesize = 0):
-    ret_str = "["
-    dl_len, max_elapsed_time = 0, 0.0
-
-    ret_str += update_progress(progress)
-
-    for rec in progress:
-        #ret_str += " " + report_bytes(rec[0])
-        dl_len += rec[0]
-        max_elapsed_time = max(rec[1], max_elapsed_time)
-    ret_str += "] Speed = "
-    if max_elapsed_time == 0:
-        avg_speed = 0
-    else:
-        avg_speed = dl_len / max_elapsed_time
-    ret_str += "%s/s." % report_bytes(avg_speed)
-
-    #Estimate remaining time.
-    if orig_filesize > 0:
-        if avg_speed > 0:
-            remaining_dl = orig_filesize - dl_len
-            if remaining_dl > 0:
-                ret_str += " %s left." % report_time( (orig_filesize - dl_len) / avg_speed)                
-        else:
-            ret_str += " Starting download..."
-    
-    ret_str = str(dl_len*100/orig_filesize) + "% " + ret_str 
- 
-    #print "\n",ret_str
-    sys.stdout.flush()
-    print "\r%s" % (ret_str),
 
         
 class FetchData(threading.Thread):
@@ -168,34 +185,27 @@ if __name__ == "__main__":
         len_list = [ (filesize / options.num_connections) for i in range(options.num_connections) ]
         len_list[0] += filesize % options.num_connections
 
-        # dots is a string representation of percentage downloaded
-        dots = [" " for i in range(options.num_connections)]
-
-        # getting terminal width from 'stty size' command
-        term_rows, term_cols = map(int, os.popen('stty size', 'r').read().split())
-        uwidth = (term_cols - 2*options.num_connections - 48)/options.num_connections
-
         #create output file
         out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
 
-        progress = [ [0,0.0] for i in len_list ]
+        pbar = ProgressBar(options.num_connections, filesize)
         start_offset = 0
         for i in range(len(len_list)):
             # each iteration should spawn a thread.
             # print start_offset, len_list[i]
-            current_thread = FetchData(i, url, output_file, start_offset, len_list[i], progress)
+            current_thread = FetchData(i, url, output_file, start_offset, len_list[i], pbar.progress)
             fetch_threads.append(current_thread)
             current_thread.start()
             start_offset += len_list[i]
 
         while threading.active_count() > 1:
             #print "\n",progress               
-            get_progress_report(progress, filesize)
+            pbar.display_progress()
             time.sleep(1)
 
         # Blank spaces trail below to erase previous output. TODO: Need to
         # do this better.
-        get_progress_report(progress, filesize)
+        pbar.display_progress()
 
     except KeyboardInterrupt, k:
         for thread in fetch_threads:
