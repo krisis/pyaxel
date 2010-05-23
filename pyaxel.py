@@ -38,6 +38,7 @@ class ProgressBar:
         for i in range(len(mult_list)):
             if time_in_secs < mult_list[i]:
                 ret_str = "%d %s" % (int(time_in_secs / (mult_list[i-1] if i>0 else 1)), unit_list[i])
+                break
         if len(ret_str) == 0: 
             ret_str = "%d %s." % ( (int(time_in_secs / mult_list[2])), unit_list[3])
         return len(ret_str), ret_str
