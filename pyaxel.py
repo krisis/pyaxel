@@ -9,12 +9,32 @@ std_headers = {
 }
 
 
-class ProgressBar:
+class ConnectionState:
     def __init__(self, n_conn, filesize):
         self.n_conn = n_conn
         self.filesize = filesize
         self.progress = [[0,0.0] for i in range(n_conn)]
+        self.chunks = [ (filesize / n_conn) for i in range(n_conn) ]
+        self.chunks[0] += filesize % n_conn
+        pass
+
+    def get_progress(self):
+        return self.progress
+
+    def update_progress(self, fetch_size, elapsed_time, conn_id):
+        self.progress[conn_id][0] += fetch_size
+        self.progress[conn_id][1] += elapsed_time 
+
+    def save_state():
+        pass
+
+
+
+class ProgressBar:
+    def __init__(self, n_conn, conn_state):
+        self.n_conn = n_conn
         self.dots = ["" for i in range(n_conn)]
+        self.conn_state = conn_state
         pass
     
     def _get_term_width(self):
@@ -27,8 +47,8 @@ class ProgressBar:
         return len(ret_str), ret_str
 
     def _get_percentage_complete(self, dl_len):
-        assert self.filesize != 0
-        ret_str = str(dl_len*100/self.filesize) + "%."
+        assert self.conn_state.filesize != 0
+        ret_str = str(dl_len*100/self.conn_state.filesize) + "%."
         return len(ret_str), ret_str
     
     def _get_time_left(self, time_in_secs):
@@ -45,8 +65,8 @@ class ProgressBar:
 
     def _get_pbar(self, width):
         ret_str = "["
-        for i in range(len(self.progress)):
-            self.dots[i] = "".join(['=' for j in range((self.progress[i][0]*width)/len_list[i])])
+        for i in range(self.n_conn):
+            self.dots[i] = "".join(['=' for j in range((self.conn_state.progress[i][0]*width)/self.conn_state.chunks[i])])
             if ret_str == "[":
                 ret_str += self.dots[i]
             else:
@@ -60,7 +80,7 @@ class ProgressBar:
 
     def display_progress(self):
         dl_len, max_elapsed_time = 0, 0.0
-        for rec in self.progress:
+        for rec in self.conn_state.progress:
             dl_len += rec[0]
             max_elapsed_time = max(max_elapsed_time, rec[1])
 
@@ -71,7 +91,7 @@ class ProgressBar:
 
         ldr, drate = self._get_download_rate(avg_speed)
         lpc, pcomp = self._get_percentage_complete(dl_len)
-        ltl, tleft = self._get_time_left((self.filesize - dl_len)/avg_speed if avg_speed > 0 else 0)
+        ltl, tleft = self._get_time_left((self.conn_state.filesize - dl_len)/avg_speed if avg_speed > 0 else 0)
         # term_width - #(|) + #([) + #(]) + #(strings) + 6 (for spaces and periods)
         available_width = self._get_term_width() - (ldr + lpc + ltl) - self.n_conn - 1 - 6
         lpb, pbar = self._get_pbar(available_width/self.n_conn)
@@ -95,14 +115,14 @@ def get_file_size(url):
         
 class FetchData(threading.Thread):
 
-    def __init__(self, name, url, out_file, start_offset, length, progress):
+    def __init__(self, name, url, out_file, start_offset, conn_state):
         threading.Thread.__init__(self)
         self.name = name
         self.url = url
         self.out_file = out_file
         self.start_offset = start_offset
-        self.length = length
-        self.progress = progress
+        self.conn_state = conn_state
+        self.length = conn_state.chunks[name]
         self._need_to_quit = False
 
     def run(self):
@@ -128,12 +148,11 @@ class FetchData(threading.Thread):
             elapsed = end_time - start_time            
             assert(len(data_block) == fetch_size)
             self.length -= fetch_size
-            self.progress[int(self.name)][0] += fetch_size
-            self.progress[int(self.name)][1] += elapsed
+            self.conn_state.update_progress(fetch_size, elapsed, int(self.name))
             os.write(out_fd, data_block)
 
 
-if __name__ == "__main__":
+def main():
     try:
         fetch_threads = []
         parser = OptionParser(usage="Usage: %prog [options] url")
@@ -182,22 +201,20 @@ if __name__ == "__main__":
         filesize = get_file_size(url)
         print "Need to fetch %s\n" % report_bytes(filesize)
 
-        # get list of data segment sizes to be fetched by each thread.
-        len_list = [ (filesize / options.num_connections) for i in range(options.num_connections) ]
-        len_list[0] += filesize % options.num_connections
+        conn_state = ConnectionState(options.num_connections, filesize)
+        pbar = ProgressBar(options.num_connections, conn_state)
 
         #create output file
         out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
 
-        pbar = ProgressBar(options.num_connections, filesize)
         start_offset = 0
-        for i in range(len(len_list)):
+        for i in range(options.num_connections):
             # each iteration should spawn a thread.
             # print start_offset, len_list[i]
-            current_thread = FetchData(i, url, output_file, start_offset, len_list[i], pbar.progress)
+            current_thread = FetchData(i, url, output_file, start_offset, conn_state)
             fetch_threads.append(current_thread)
             current_thread.start()
-            start_offset += len_list[i]
+            start_offset += conn_state.chunks[i]
 
         while threading.active_count() > 1:
             #print "\n",progress               
@@ -217,3 +234,6 @@ if __name__ == "__main__":
         print e
         for thread in fetch_threads:
             thread._need_to_quit = True
+
+if __name__ == "__main__":
+    main()
