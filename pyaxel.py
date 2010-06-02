@@ -131,19 +131,36 @@ class FetchData(threading.Thread):
         request = urllib2.Request(self.url, None, std_headers)
         request.add_header('Range','bytes=%d-%d' % (self.start_offset, 
                                                     self.start_offset+self.length))
-        data = urllib2.urlopen(request)
+        while 1:
+            try:
+                data = urllib2.urlopen(request)
+            except urllib2.URLError, u:
+                pass
+            else:
+                break
 
         # Open the output file
         out_fd = os.open(self.out_file, os.O_WRONLY)
         os.lseek(out_fd, self.start_offset, os.SEEK_SET)
         
         block_size = 1024
+        #indicates if connection timed out on a try
+        retry = 0
         while self.length > 0:
             if self._need_to_quit:
                 return
             fetch_size = block_size if self.length >= block_size else self.length
-            start_time = time.time()
-            data_block = data.read(fetch_size)            
+            if retry == 0:
+                start_time = time.time()
+            try:
+                data_block = data.read(fetch_size)            
+
+            except socket.timeout, s:
+                retry = 1
+                continue
+            else:
+                retry = 0
+
             end_time = time.time()
             elapsed = end_time - start_time            
             assert(len(data_block) == fetch_size)
