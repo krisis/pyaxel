@@ -135,7 +135,7 @@ class FetchData(threading.Thread):
             try:
                 data = urllib2.urlopen(request)
             except urllib2.URLError, u:
-                pass
+                print self.name, u
             else:
                 break
 
@@ -156,6 +156,7 @@ class FetchData(threading.Thread):
                 data_block = data.read(fetch_size)            
 
             except socket.timeout, s:
+                print self.name, s
                 retry = 1
                 continue
             else:
