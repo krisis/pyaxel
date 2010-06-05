@@ -154,25 +154,29 @@ class FetchData(threading.Thread):
                 start_time = time.time()
             try:
                 data_block = data.read(fetch_size)            
+                if len(data_block) == 0: 
+                    print "Connection %s: [TESTING]: 0 sized block fetched." % (self.name)
+                if len(data_block) != fetch_size:
+                    print "Connection %s: len(data_block) != fetch_size, but continuing anyway." % (self.name)
+                    self.run()
+                    return
 
             except socket.timeout, s:
                 print "Connection", self.name, "timed out with", s
                 retry = 1
-                continue
+                self.run()
+                return
+
             else:
                 retry = 0
 
             end_time = time.time()
             elapsed = end_time - start_time            
             #assert(len(data_block) == fetch_size)
-            if len(data_block) == 0: 
-                print "Connection %s: [TESTING]: 0 sized block fetched." % (self.name)
-            if len(data_block) != fetch_size:
-                print "Connection %s: len(data_block) != fetch_size, but continuing anyway." % (self.name)
-                fetch_size = len(data_block)
             self.length -= fetch_size
             self.conn_state.update_progress(fetch_size, elapsed, int(self.name))
             os.write(out_fd, data_block)
+            self.start_offset += len(data_block)
 
 
 def main():
