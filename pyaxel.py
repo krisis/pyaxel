@@ -164,7 +164,11 @@ class FetchData(threading.Thread):
 
             end_time = time.time()
             elapsed = end_time - start_time            
-            assert(len(data_block) == fetch_size)
+            #assert(len(data_block) == fetch_size)
+            if len(data_block) == 0: print "[TESTING]: 0 sized block fetched."
+            if len(data_block) != fetch_size:
+                print "len(data_block) != fetch_size, but continuing anyway."
+                fetch_size = len(data_block)
             self.length -= fetch_size
             self.conn_state.update_progress(fetch_size, elapsed, int(self.name))
             os.write(out_fd, data_block)
