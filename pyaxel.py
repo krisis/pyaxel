@@ -1,4 +1,4 @@
-import sys, os, urllib2, socket, time, threading, math
+import sys, os, urllib2, socket, time, threading, math, cPickle
 from optparse import OptionParser
 
 std_headers = {
@@ -25,8 +25,17 @@ class ConnectionState:
         self.progress[conn_id][0] += fetch_size
         self.progress[conn_id][1] += elapsed_time 
 
-    def save_state():
-        pass
+    def resume_state(self, in_fd):
+        saved_obj = cPickle.load(in_fd) 
+        self.n_conn = saved_obj.n_conn
+        self.filesize = saved_obj.filesize
+        self.progress = saved_obj.progress
+        self.chunks = saved_obj.chunks
+
+    def save_state(self, out_fd):
+        #out_fd will be closed after save_state() is completed
+        #to ensure that state is written onto the disk
+        cPickle.dump(self, out_fd) 
 
 
 
@@ -115,14 +124,15 @@ def get_file_size(url):
         
 class FetchData(threading.Thread):
 
-    def __init__(self, name, url, out_file, start_offset, conn_state):
+    def __init__(self, name, url, out_file, state_file, start_offset, conn_state):
         threading.Thread.__init__(self)
         self.name = name
         self.url = url
         self.out_file = out_file
+        self.state_file = state_file
         self.start_offset = start_offset
         self.conn_state = conn_state
-        self.length = conn_state.chunks[name]
+        self.length = conn_state.chunks[name] - conn_state.progress[name][0]
         self._need_to_quit = False
 
     def run(self):
@@ -177,6 +187,10 @@ class FetchData(threading.Thread):
             self.conn_state.update_progress(fetch_size, elapsed, int(self.name))
             os.write(out_fd, data_block)
             self.start_offset += len(data_block)
+            #saving state after each blk of dwnld
+            state_fd = file(self.state_file, "wb")
+            self.conn_state.save_state(state_fd)
+            state_fd.close()
 
 
 def main():
@@ -231,6 +245,18 @@ def main():
         conn_state = ConnectionState(options.num_connections, filesize)
         pbar = ProgressBar(options.num_connections, conn_state)
 
+        # Checking if we have a partial download available and resume
+        state_file = output_file + ".st"
+        try:
+            os.stat(state_file)
+        except OSError, o:
+            #statefile is missing for all practical purposes
+            pass
+        else:
+            state_fd = file(state_file, "r")
+            conn_state.resume_state(state_fd)
+            state_fd.close()
+
         #create output file
         out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
 
@@ -238,7 +264,7 @@ def main():
         for i in range(options.num_connections):
             # each iteration should spawn a thread.
             # print start_offset, len_list[i]
-            current_thread = FetchData(i, url, output_file, start_offset, conn_state)
+            current_thread = FetchData(i, url, output_file, state_file, start_offset + conn_state.progress[i][0], conn_state)
             fetch_threads.append(current_thread)
             current_thread.start()
             start_offset += conn_state.chunks[i]
@@ -251,6 +277,10 @@ def main():
         # Blank spaces trail below to erase previous output. TODO: Need to
         # do this better.
         pbar.display_progress()
+
+        #at this point we are sure dwnld completed and can delete the state file
+        os.remove(state_file)
+
 
     except KeyboardInterrupt, k:
         for thread in fetch_threads:
