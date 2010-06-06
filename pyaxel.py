@@ -139,6 +139,8 @@ class FetchData(threading.Thread):
         # Ready the url object
         # print "Running thread with %d-%d" % (self.start_offset, self.length)
         request = urllib2.Request(self.url, None, std_headers)
+        if self.length == 0:
+            return 
         request.add_header('Range','bytes=%d-%d' % (self.start_offset, 
                                                     self.start_offset+self.length))
         while 1:
