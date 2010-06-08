@@ -13,17 +13,16 @@ class ConnectionState:
     def __init__(self, n_conn, filesize):
         self.n_conn = n_conn
         self.filesize = filesize
-        self.progress = [[0,0.0] for i in range(n_conn)]
+        self.progress = [0 for i in range(n_conn)]
+        self.elapsed_time = 0
         self.chunks = [ (filesize / n_conn) for i in range(n_conn) ]
         self.chunks[0] += filesize % n_conn
-        pass
 
-    def get_progress(self):
-        return self.progress
+    def update_time_taken(self, elapsed_time):
+        self.elapsed_time += elapsed_time 
 
-    def update_progress(self, fetch_size, elapsed_time, conn_id):
-        self.progress[conn_id][0] += fetch_size
-        self.progress[conn_id][1] += elapsed_time 
+    def update_data_downloaded(self, fetch_size, conn_id):
+        self.progress[conn_id] += fetch_size
 
     def resume_state(self, in_fd):
         saved_obj = cPickle.load(in_fd) 
@@ -31,6 +30,7 @@ class ConnectionState:
         self.filesize = saved_obj.filesize
         self.progress = saved_obj.progress
         self.chunks = saved_obj.chunks
+        self.elapsed_time = saved_obj.elapsed_time
 
     def save_state(self, out_fd):
         #out_fd will be closed after save_state() is completed
@@ -75,7 +75,7 @@ class ProgressBar:
     def _get_pbar(self, width):
         ret_str = "["
         for i in range(self.n_conn):
-            self.dots[i] = "".join(['=' for j in range((self.conn_state.progress[i][0]*width)/self.conn_state.chunks[i])])
+            self.dots[i] = "".join(['=' for j in range((self.conn_state.progress[i]*width)/self.conn_state.chunks[i])])
             if ret_str == "[":
                 ret_str += self.dots[i]
             else:
@@ -88,15 +88,12 @@ class ProgressBar:
         return len(ret_str), ret_str
 
     def display_progress(self):
-        dl_len, max_elapsed_time = 0, 0.0
+        dl_len = 0
         for rec in self.conn_state.progress:
-            dl_len += rec[0]
-            max_elapsed_time = max(max_elapsed_time, rec[1])
+            dl_len += rec
 
-        if max_elapsed_time == 0:
-            avg_speed = 0
-        else:
-            avg_speed = dl_len / max_elapsed_time
+        assert(self.conn_state.elapsed_time > 0)
+        avg_speed = dl_len / self.conn_state.elapsed_time 
 
         ldr, drate = self._get_download_rate(avg_speed)
         lpc, pcomp = self._get_percentage_complete(dl_len)
@@ -132,7 +129,7 @@ class FetchData(threading.Thread):
         self.state_file = state_file
         self.start_offset = start_offset
         self.conn_state = conn_state
-        self.length = conn_state.chunks[name] - conn_state.progress[name][0]
+        self.length = conn_state.chunks[name] - conn_state.progress[name]
         self._need_to_quit = False
 
     def run(self):
@@ -157,13 +154,10 @@ class FetchData(threading.Thread):
         
         block_size = 1024
         #indicates if connection timed out on a try
-        retry = 0
         while self.length > 0:
             if self._need_to_quit:
                 return
             fetch_size = block_size if self.length >= block_size else self.length
-            if retry == 0:
-                start_time = time.time()
             try:
                 data_block = data.read(fetch_size)            
                 if len(data_block) == 0: 
@@ -175,18 +169,15 @@ class FetchData(threading.Thread):
 
             except socket.timeout, s:
                 print "Connection", self.name, "timed out with", s
-                retry = 1
                 self.run()
                 return
 
             else:
                 retry = 0
 
-            end_time = time.time()
-            elapsed = end_time - start_time            
             #assert(len(data_block) == fetch_size)
             self.length -= fetch_size
-            self.conn_state.update_progress(fetch_size, elapsed, int(self.name))
+            self.conn_state.update_data_downloaded(fetch_size, int(self.name))
             os.write(out_fd, data_block)
             self.start_offset += len(data_block)
             #saving state after each blk of dwnld
@@ -263,16 +254,20 @@ def main():
         out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
 
         start_offset = 0
+        start_time = time.time()
         for i in range(options.num_connections):
             # each iteration should spawn a thread.
             # print start_offset, len_list[i]
-            current_thread = FetchData(i, url, output_file, state_file, start_offset + conn_state.progress[i][0], conn_state)
+            current_thread = FetchData(i, url, output_file, state_file, start_offset + conn_state.progress[i], conn_state)
             fetch_threads.append(current_thread)
             current_thread.start()
             start_offset += conn_state.chunks[i]
 
         while threading.active_count() > 1:
             #print "\n",progress               
+            end_time = time.time()
+            conn_state.update_time_taken(end_time - start_time);
+            start_time = end_time
             pbar.display_progress()
             time.sleep(1)
 
