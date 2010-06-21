@@ -18,6 +18,12 @@ class ConnectionState:
         self.chunks = [ (filesize / n_conn) for i in range(n_conn) ]
         self.chunks[0] += filesize % n_conn
 
+    def download_sofar(self):
+        dwnld_sofar = 0
+        for rec in self.progress:
+            dwnld_sofar += rec
+        return dwnld_sofar 
+
     def update_time_taken(self, elapsed_time):
         self.elapsed_time += elapsed_time 
 
@@ -130,7 +136,9 @@ class FetchData(threading.Thread):
         self.start_offset = start_offset
         self.conn_state = conn_state
         self.length = conn_state.chunks[name] - conn_state.progress[name]
-        self._need_to_quit = False
+        self.sleep_timer = 0
+        self.need_to_quit = False
+        self.need_to_sleep = False
 
     def run(self):
         # Ready the url object
@@ -155,8 +163,13 @@ class FetchData(threading.Thread):
         block_size = 1024
         #indicates if connection timed out on a try
         while self.length > 0:
-            if self._need_to_quit:
+            if self.need_to_quit:
                 return
+
+            if self.need_to_sleep:
+                time.sleep(self.sleep_timer)
+                self.need_to_sleep = False
+
             fetch_size = block_size if self.length >= block_size else self.length
             try:
                 data_block = data.read(fetch_size)            
@@ -266,8 +279,14 @@ def main():
         while threading.active_count() > 1:
             #print "\n",progress               
             end_time = time.time()
-            conn_state.update_time_taken(end_time - start_time);
+            conn_state.update_time_taken(end_time - start_time)
             start_time = end_time
+            dwnld_sofar = conn_state.download_sofar()
+            if options.max_speed != None and dwnld_sofar / conn_state.elapsed_time > options.max_speed*1024:
+                for th in fetch_threads:
+                    th.need_to_sleep = True
+                    th.sleep_timer = dwnld_sofar / options.max_speed*1024 - conn_state.elapsed_time 
+
             pbar.display_progress()
             time.sleep(1)
 
@@ -281,7 +300,7 @@ def main():
 
     except KeyboardInterrupt, k:
         for thread in fetch_threads:
-            thread._need_to_quit = True
+            thread.need_to_quit = True
 
     except Exception, e:
         # TODO: handle other types of errors too.
