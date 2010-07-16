@@ -337,13 +337,12 @@ def main():
     except KeyboardInterrupt, k:
         for thread in fetch_threads:
             thread.need_to_quit = True
-"""
+
     except Exception, e:
         # TODO: handle other types of errors too.
         print e
         for thread in fetch_threads:
             thread._need_to_quit = True
-"""
 
 if __name__ == "__main__":
     main()
