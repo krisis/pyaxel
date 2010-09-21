@@ -226,41 +226,14 @@ class FetchData(threading.Thread):
             state_fd.close()
 
 
-def main():
+def main(options, args):
     try:
         fetch_threads = []
-        parser = OptionParser(usage="Usage: %prog [options] url")
-        parser.add_option("-s", "--max-speed", dest="max_speed",
-                          help="Specifies maximum speed (bytes per second)."
-                          " Useful if you don't want the program to suck up"
-                          " all of your bandwidth",
-                          metavar="SPEED")
-        parser.add_option("-q", "--quiet",
-                          action="store_false", dest="verbose", default=True,
-                          help="don't print status messages to stdout")
-        parser.add_option("-n", "--num-connections", dest="num_connections",
-                          type="int", default=4,
-                          help="You can specify an alternative number of"
-                              " connections here.",
-                          metavar="NUM")
-        parser.add_option("-o", "--output", dest="output_file",
-                          help="By default, data does to a local file of "
-                          "the same name. If this option is used, downloaded"
-                          " data will go to this file.")
-
-        (options, args) = parser.parse_args()
-
-        print "Options: ", options
-        print "args: ", args
-
-        if len(args) != 1:
-            parser.print_help()
-            sys.exit(1)
 
         # General configuration
         urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
         urllib2.install_opener(urllib2.build_opener(
-            urllib2.HTTPCookieProcessor()))
+                urllib2.HTTPCookieProcessor()))
         socket.setdefaulttimeout(120)         # 2 minutes
 
         url = args[0]
@@ -326,8 +299,6 @@ def main():
             pbar.display_progress()
             time.sleep(1)
 
-        # Blank spaces trail below to erase previous output. TODO: Need to
-        # do this better.
         pbar.display_progress()
 
         # at this point we are sure dwnld completed and can delete the
@@ -345,4 +316,33 @@ def main():
             thread._need_to_quit = True
 
 if __name__ == "__main__":
-    main()
+
+    parser = OptionParser(usage="Usage: %prog [options] url")
+    parser.add_option("-s", "--max-speed", dest="max_speed",
+                      help="Specifies maximum speed (bytes per second)."
+                      " Useful if you don't want the program to suck up"
+                      " all of your bandwidth",
+                      metavar="SPEED")
+    parser.add_option("-q", "--quiet",
+                      action="store_false", dest="verbose", default=True,
+                      help="don't print status messages to stdout")
+    parser.add_option("-n", "--num-connections", dest="num_connections",
+                      type="int", default=4,
+                      help="You can specify an alternative number of"
+                      " connections here.",
+                      metavar="NUM")
+    parser.add_option("-o", "--output", dest="output_file",
+                      help="By default, data does to a local file of "
+                      "the same name. If this option is used, downloaded"
+                      " data will go to this file.")
+    
+    (options, args) = parser.parse_args()
+
+    print "Options: ", options
+    print "args: ", args
+
+    if len(args) != 1:
+        parser.print_help()
+        sys.exit(1)
+
+    main(options, args)
