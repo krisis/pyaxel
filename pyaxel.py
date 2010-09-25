@@ -40,6 +40,8 @@ class ConnectionState:
     def update_data_downloaded(self, fetch_size, conn_id):
         self.progress[conn_id] += fetch_size
 
+    # TODO: What if state file is corrupted? Need to recover
+    # gracefully.
     def resume_state(self, in_fd):
         saved_obj = cPickle.load(in_fd)
         self.n_conn = saved_obj.n_conn
@@ -228,8 +230,6 @@ class FetchData(threading.Thread):
 
 def main(options, args):
     try:
-        fetch_threads = []
-
         # General configuration
         urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
         urllib2.install_opener(urllib2.build_opener(
@@ -238,6 +238,8 @@ def main(options, args):
 
         url = args[0]
 
+        #TODO: Need to improve this (perhaps put in a separate
+        #function)
         output_file = url.rsplit("/", 1)[1]   # basename of the url
 
         if options.output_file != None:
@@ -250,6 +252,8 @@ def main(options, args):
         print "Destination = ", output_file
 
         filesize = get_file_size(url)
+        # TODO: Not the right location to print the remaining fetch
+        # length
         print "Need to fetch %s\n" % report_bytes(filesize)
 
         conn_state = ConnectionState(options.num_connections, filesize)
@@ -270,6 +274,7 @@ def main(options, args):
         #create output file
         out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
 
+        fetch_threads = []
         start_offset = 0
         start_time = time.time()
         for i in range(options.num_connections):
