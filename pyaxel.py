@@ -40,10 +40,14 @@ class ConnectionState:
     def update_data_downloaded(self, fetch_size, conn_id):
         self.progress[conn_id] += fetch_size
 
-    # TODO: What if state file is corrupted? Need to recover
-    # gracefully.
     def resume_state(self, in_fd):
-        saved_obj = cPickle.load(in_fd)
+        try:
+            saved_obj = cPickle.load(in_fd)
+        except cPickle.UnpicklingError:
+            print "State file is corrupted"
+            #now start download from the beginning
+            return 
+
         self.n_conn = saved_obj.n_conn
         self.filesize = saved_obj.filesize
         self.progress = saved_obj.progress
@@ -252,9 +256,6 @@ def main(options, args):
         print "Destination = ", output_file
 
         filesize = get_file_size(url)
-        # TODO: Not the right location to print the remaining fetch
-        # length
-        print "Need to fetch %s\n" % report_bytes(filesize)
 
         conn_state = ConnectionState(options.num_connections, filesize)
         pbar = ProgressBar(options.num_connections, conn_state)
@@ -271,6 +272,7 @@ def main(options, args):
             conn_state.resume_state(state_fd)
             state_fd.close()
 
+        print "Need to fetch %s\n" % report_bytes(conn_state.filesize - sum(conn_state.progress))
         #create output file
         out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
 
