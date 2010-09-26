@@ -231,19 +231,16 @@ class FetchData(threading.Thread):
             self.conn_state.save_state(state_fd)
             state_fd.close()
 
+def general_configuration():
+    # General configuration
+    urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
+    urllib2.install_opener(urllib2.build_opener(
+            urllib2.HTTPCookieProcessor()))
+    socket.setdefaulttimeout(120)         # 2 minutes
 
-def main(options, args):
+def download(url, options):
+
     try:
-        # General configuration
-        urllib2.install_opener(urllib2.build_opener(urllib2.ProxyHandler()))
-        urllib2.install_opener(urllib2.build_opener(
-                urllib2.HTTPCookieProcessor()))
-        socket.setdefaulttimeout(120)         # 2 minutes
-
-        url = args[0]
-
-        #TODO: Need to improve this (perhaps put in a separate
-        #function)
         output_file = url.rsplit("/", 1)[1]   # basename of the url
 
         if options.output_file != None:
@@ -322,6 +319,29 @@ def main(options, args):
         for thread in fetch_threads:
             thread._need_to_quit = True
 
+def main(options, args):
+    try:
+        general_configuration()
+
+        if options.to_update == True:
+            url = "http://code.google.com/p/pyaxel/" #TODO: complete this URL
+            options.output_file = __file__
+            download(url, options)
+            print "pyaxel was updated to TODO version"
+        else:
+            url = args[0]
+            download(url, options)
+
+        #TODO update version msg if applicable
+
+    except KeyboardInterrupt, k:
+        sys.exit(1)
+
+    except Exception, e:
+        # TODO: handle other types of errors too.
+        print e
+        pass
+
 if __name__ == "__main__":
 
     parser = OptionParser(usage="Usage: %prog [options] url")
@@ -343,6 +363,12 @@ if __name__ == "__main__":
                       "the same name. If this option is used, downloaded"
                       " data will go to this file.")
     
+    parser.add_option("-u", "--update",
+                      action="store_true", dest="to_update", default=False,
+                      help="If option is supplied, the pyaxel software is"
+                      "updated to its latest version fetched from "
+                      "code.google.com/p/pyaxel (nothing else is done).")
+                    
     (options, args) = parser.parse_args()
 
     print "Options: ", options
