@@ -297,8 +297,8 @@ def download(url, options):
                     (options.max_speed * 1024):
                 for th in fetch_threads:
                     th.need_to_sleep = True
-                    th.sleep_timer = dwnld_sofar / options.max_speed * \
-                        1024 - conn_state.elapsed_time
+                    th.sleep_timer = dwnld_sofar / (options.max_speed * \
+                        1024 - conn_state.elapsed_time)
 
             pbar.display_progress()
             time.sleep(1)
@@ -338,7 +338,8 @@ if __name__ == "__main__":
 
     parser = OptionParser(usage="Usage: %prog [options] url")
     parser.add_option("-s", "--max-speed", dest="max_speed",
-                      help="Specifies maximum speed (bytes per second)."
+                      type="int", 
+                      help="Specifies maximum speed (Kbytes per second)."
                       " Useful if you don't want the program to suck up"
                       " all of your bandwidth",
                       metavar="SPEED")
