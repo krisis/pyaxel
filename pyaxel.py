@@ -1,3 +1,4 @@
+#! /usr/bin/env python
 import cPickle
 import math
 import os
@@ -185,7 +186,7 @@ class FetchData(threading.Thread):
                 break
 
         # Open the output file
-        out_fd = os.open(self.out_file, os.O_WRONLY)
+        out_fd = os.open(self.out_file+".part", os.O_WRONLY)
         os.lseek(out_fd, self.start_offset, os.SEEK_SET)
 
         block_size = 1024
@@ -239,7 +240,7 @@ def general_configuration():
     socket.setdefaulttimeout(120)         # 2 minutes
 
 def download(url, options):
-
+    fetch_threads = []
     try:
         output_file = url.rsplit("/", 1)[1]   # basename of the url
 
@@ -270,10 +271,9 @@ def download(url, options):
             state_fd.close()
 
         print "Need to fetch %s\n" % report_bytes(conn_state.filesize - sum(conn_state.progress))
-        #create output file
-        out_fd = os.open(output_file, os.O_CREAT | os.O_WRONLY)
+        #create output file with a .part extension to indicate partial download
+        out_fd = os.open(output_file+".part", os.O_CREAT | os.O_WRONLY)
 
-        fetch_threads = []
         start_offset = 0
         start_time = time.time()
         for i in range(options.num_connections):
@@ -306,8 +306,9 @@ def download(url, options):
         pbar.display_progress()
 
         # at this point we are sure dwnld completed and can delete the
-        # state file
+        # state file and move the dwnld to output file from .part file
         os.remove(state_file)
+        os.rename(output_file+".part", output_file)
 
     except KeyboardInterrupt, k:
         for thread in fetch_threads:
@@ -322,17 +323,8 @@ def download(url, options):
 def main(options, args):
     try:
         general_configuration()
-
-        if options.to_update == True:
-            url = "http://code.google.com/p/pyaxel/" #TODO: complete this URL
-            options.output_file = __file__
-            download(url, options)
-            print "pyaxel was updated to TODO version"
-        else:
-            url = args[0]
-            download(url, options)
-
-        #TODO update version msg if applicable
+        url = args[0]
+        download(url, options)
 
     except KeyboardInterrupt, k:
         sys.exit(1)
@@ -363,12 +355,6 @@ if __name__ == "__main__":
                       "the same name. If this option is used, downloaded"
                       " data will go to this file.")
     
-    parser.add_option("-u", "--update",
-                      action="store_true", dest="to_update", default=False,
-                      help="If option is supplied, the pyaxel software is"
-                      "updated to its latest version fetched from "
-                      "code.google.com/p/pyaxel (nothing else is done).")
-                    
     (options, args) = parser.parse_args()
 
     print "Options: ", options
