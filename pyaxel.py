@@ -16,7 +16,8 @@ from optparse import OptionParser
 2) Get each chunk size
 """
 
-BLK_SIZE = 1024*1024
+BLK_SIZE = 256*1024         # file writing block size.
+CHUNK_SIZE = 1024*1024      # max download per GET request
 MAX_RETRIES = 10
 
 std_headers = {
@@ -28,17 +29,60 @@ std_headers = {
     'Accept-Language': 'en-us,en;q=0.5',
 }
 
+
+class FileWriter:
+    def __init__(self, filename):
+        try:
+            self.fd = os.open(filename,
+                              os.O_CREAT | os.O_WRONLY)
+        except OSError, e:
+            # TODO: stop all threads and exit
+            print e.message
+
+    def seek(self, offset):
+        try:
+            os.lseek(self.fd, offset, os.SEEK_SET)
+        except OSError, e:
+            print "Seek error: %s" % (e.message)
+
+    def write(self, block):
+        try:
+            os.write(self.fd, block)
+        except OSError, e:
+            print "Write error: %s" % (e.message)
+
+    def close(self):
+        try:
+            os.close(self.fd)
+        except OSError, e:
+            print "File close error: %s" % (e.message)
+
+
 class DownloadState:
     def __init__(self, n_conn, url, filesize, filename):
         self.n_conn = n_conn
         self.filesize = filesize
         self.filename = filename
         self.url = url
-        self.ongoing_jobs = {}
+        self.continue_offset = 0
+        self.todo_ranges = []
+        self.inprogress_ranges = {}
+        self.inprogress_lock = threading.Lock()
         self.elapsed_time = 0
+
+    def update_inprogress_entry(self, thread_id, byte_offsets):
+        self.inprogress_lock.acquire()
+        self.inprogress_ranges[thread_id] = byte_offsets
+        self.inprogress_lock.release()
+
+    def delete_inprogress_entry(self, thread_id):
+        self.inprogress_lock.acquire()
+        del self.inprogress_ranges[thread_id]
+        self.inprogress_lock.release()
 
     def write_state(self):
         pass
+
 
 class JobTracker:
     def __init__(self, download_state):
@@ -48,81 +92,83 @@ class JobTracker:
         self.next_todo_job = 0
         self.lock = threading.Lock()
 
+    def __get_next_chunk(self):
+        start = self.download_state.continue_offset
+        length = min(CHUNK_SIZE, self.download_state.filesize - start)
+        print "le", length
+        if length <= 0:
+            return None
+        end = start + length - 1
+        self.download_state.continue_offset += length
+        return (start, end)
+
     def get_next_job(self):
         self.lock.acquire()
-        r = self.next_todo_job
-        if r >= self.job_count:
-            r = None
+        if self.download_state.todo_ranges:
+            r = self.download_state.todo_ranges.pop()
         else:
-            self.next_todo_job += 1
+            r = self.__get_next_chunk()
         self.lock.release()
         return r
-        
+
+
 class Worker(threading.Thread):
     def __init__(self, name, download_state, job_tracker):
-        threading.Thread.__init__(self)
-        self.name = str(name)
+        threading.Thread.__init__(self, name=name)
         self.download_state = download_state
         self.job_tracker = job_tracker
-        self.offset = 0
-        self.length = 0
+        self.start_offset = 0
+        self.end_offset = 0
+        self.fwriter = FileWriter(download_state.filename + ".part")
         self._need_to_quit = False
+        self.isFailing = False
 
-    def __update_offset_and_length(self, jobNo):
-        self.offset = jobNo * BLK_SIZE
-        self.length = min(BLK_SIZE, self.download_state.filesize - self.offset)
+    def __update_offsets(self, job):
+        self.start_offset, self.end_offset = job
 
-    def __open_output_file(self):
-        try:
-            out_fd = os.open(self.download_state.filename + ".part",
-                             os.O_CREAT | os.O_WRONLY)
-            os.lseek(out_fd, self.offset, os.SEEK_SET)
-            return out_fd
-        except OSError, e:
-            # TODO: stop all threads and exit
-            print e.message
-
-    def __get_remote_data(self):
-        request = urllib2.Request(self.download_state.url, None, std_headers)
-        request.add_header('Range', 'bytes=%d-%d' % (self.offset,
-                                                     self.offset + self.length - 1))
+    def __download_range(self):
         attempts = 0
         remote_file = None
         data_block = None
         while attempts < MAX_RETRIES:
             try:
+                request = urllib2.Request(self.download_state.url, None, std_headers)
+                request.add_header('Range', 'bytes=%d-%d' % (self.start_offset,
+                                                             self.end_offset))
                 remote_file = urllib2.urlopen(request)
-                data_block = remote_file.read()
-                if len(data_block) == self.length:
-                    #print "Got bytes %d to %d" % \
-                    #    (self.offset, self.offset + self.length - 1)
-                    break
-            except urllib2.URLError, u:
-                print "Failed to open url with error: %s. " + \
-                    "Retrying connection %s" % (u.message, self.name)
-            attempts += 1
-
-        if len(data_block) != self.length:
-            print "Could not get data from offset %d to %d" \
-                % (self.offset, self.offset + self.length)
-            # TODO raise exception or exit
-        return data_block
+                self.fwriter.seek(self.start_offset)
+                bytes_read = 0
+                while True:
+                    data_block = remote_file.read(BLK_SIZE)
+                    if not data_block:
+                        self.download_state.delete_inprogress_entry(self.name)
+                        return
+                    bytes_read += len(data_block)
+                    self.fwriter.write(data_block)
+                    self.download_state.update_inprogress_entry(self.name,
+                        (self.start_offset + bytes_read, self.end_offset))
+                    if self._need_to_quit:
+                        return
+            except urllib2.URLError:
+                attempts += 1
+            except IOError:
+                self.start_offset += bytes_read
+                attempts += 1
+        if attempts >= MAX_RETRIES:
+            self.isFailing = True
 
     def run(self):
-        jobNo = self.job_tracker.get_next_job()
-        while jobNo != None:
-            self.__update_offset_and_length(jobNo)
-            if self._need_to_quit: return
-            output_file = self.__open_output_file()
-            if self._need_to_quit: return
-            self.download_state.ongoing_jobs[jobNo] = None
-            remote_block = self.__get_remote_data()
-            os.write(output_file, remote_block)
-            os.close(output_file)
-            del self.download_state.ongoing_jobs[jobNo]
+        job = self.job_tracker.get_next_job()
+        while job != None:
+            print job
+            self.__update_offsets(job)
+            self.__download_range()
             self.download_state.write_state()
-            if self._need_to_quit: return
+            if self._need_to_quit or self.isFailing:
+                break
             jobNo = self.job_tracker.get_next_job()
+        self.fwriter.close()
+
 
 def get_file_size(url):
     request = urllib2.Request(url, None, std_headers)
@@ -157,13 +203,23 @@ def download(url, options):
             fetch_threads.append(current_thread)
             current_thread.start()
 
+        isFailing = False
         while threading.active_count() > 1:
+            for thread in fetch_threads:
+                if thread.isFailing == True:
+                    isFailing = True
+                    break
+            if isFailing:
+                for thread in fetch_threads:
+                    thread._need_to_quit = True
             time.sleep(1)
-
+        
         # # at this point we are sure dwnld completed and can delete the
         # # state file and move the dwnld to output file from .part file
         # os.remove(state_file)
-        os.rename(output_file + ".part", output_file)
+        if isFailing:
+            print "File downloading failed!"
+
 
     except KeyboardInterrupt, k:
         print "KeyboardInterrupt! Quitting."
